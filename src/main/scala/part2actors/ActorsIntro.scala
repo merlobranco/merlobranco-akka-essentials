@@ -31,6 +31,10 @@ object ActorsIntro extends App {
   wordCounter ! "I am learning Akka and it's pretty damn cool!" // "Tell"
   anotherWordCounter ! "A different message"
 
+  object Person {
+    def props(name: String) = Props(new Person(name))
+  }
+
   class Person(name: String) extends Actor {
     override def receive: Receive = {
       case "Hi" => println(s"Hi my name is, $name")
@@ -38,6 +42,6 @@ object ActorsIntro extends App {
   }
 
   // Creating an actor of a class with constructor arguments
-  val person = actorSystem.actorOf(Props(new Person("Bob")))
+  val person = actorSystem.actorOf(Person.props("Bob"))
   person ! "Hi"
 }
