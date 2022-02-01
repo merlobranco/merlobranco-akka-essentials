@@ -81,56 +81,87 @@ object ActorCapabilities extends App {
    *  Interacts with other kind of actor
    */
 
+  // Domain of the CounterActor
+  object CounterActor {
+    case object Increment
+    case object Decrement
+    case object Print
+  }
+
   class CounterActor extends Actor {
+    import CounterActor._
     var counter = 0
 
     override def receive: Receive = {
-      case "Increment" => counter += 1
-      case "Decrement" => counter -= 1
-      case "Print" => println(s"[CounterActor] Counter = $counter")
+      case Increment => counter += 1
+      case Decrement => counter -= 1
+      case Print => println(s"[CounterActor] Counter = $counter")
     }
   }
 
   val counterActor = system.actorOf(Props[CounterActor], "counterActor")
 
-  counterActor ! "Decrement"
-  counterActor ! "Increment"
-  counterActor ! "Decrement"
-  counterActor ! "Print"
+  import CounterActor._
+  (1 to 5).foreach(_ => counterActor ! Increment)
+  (1 to 3).foreach(_ => counterActor ! Decrement)
+  counterActor ! Print
 
-  case class Deposit(atm: ActorRef, amount: Long = 0)
-  case class Withdraw(atm: ActorRef, amount: Long = 0)
-  case class Statement(atm: ActorRef)
+  object BankActor {
+    case class Deposit(amount: Long = 0)
+    case class Withdraw(amount: Long = 0)
+    case object Statement
+
+    case class TransactionSuccess(message: String)
+    case class TransactionFailure(reason: String)
+  }
 
   class BankActor extends Actor {
+    import BankActor._
+
     var balance = 0L
 
     override def receive: Receive = {
-      case Deposit(atm, amount) =>
-        balance += amount
-        atm ! Success(s"[BackActor] Amount = $amount added to your balance")
-      case Withdraw(atm, amount) =>
-        balance -= amount
-        atm ! Success(s"[BackActor] Amount = $amount reduced from your balance")
-      case Statement(atm) =>
-        atm ! Success(s"[BackActor] You balance is $balance")
-      case _ =>
-        Failure(new Exception("I do not understand such operation"))
+      case Deposit(amount) =>
+        if (amount < 0)
+          sender() ! TransactionFailure(s"[BackActor] You cannot add a negative amount: $amount to your balance")
+        else {
+          balance += amount
+          sender() ! TransactionSuccess(s"[BackActor] Amount = $amount added to your balance")
+        }
+      case Withdraw(amount) =>
+        if (amount < 0)
+          sender() ! TransactionFailure(s"[BackActor] You cannot reduce a negative amount: $amount to your balance")
+        else if (balance < amount)
+          sender() ! TransactionFailure(s"[BackActor] You cannot reduce the amount: $amount to your balance")
+        else {
+          balance -= amount
+          sender() ! TransactionSuccess(s"[BackActor] Amount = $amount reduced to your balance")
+        }
+      case Statement =>
+        sender() ! s"[BackActor] You balance is $balance"
     }
   }
 
+  object ATMActor {
+    case class PerformActions(account: ActorRef)
+  }
+
   class ATMActor extends Actor {
+    import ATMActor._
+    import BankActor._
+
     override def receive: Receive = {
-      case Success(content) => println(content)
-      case Failure(exception) => println(exception)
+      case PerformActions(bankActor) =>
+        bankActor ! Deposit(2000)
+        bankActor ! Withdraw(500)
+        bankActor ! Statement
+      case message => println(message.toString)
     }
   }
 
   val bankActor = system.actorOf(Props[BankActor], "bankActor")
   val atmActor = system.actorOf(Props[ATMActor], "atmActor")
 
-  bankActor ! Deposit(atmActor, 2000)
-  bankActor ! Withdraw(atmActor, 500)
-  bankActor ! Statement(atmActor)
-
+  import ATMActor._
+  atmActor ! PerformActions(bankActor)
 }
