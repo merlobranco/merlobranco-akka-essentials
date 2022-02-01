@@ -2,6 +2,8 @@ package part2actors
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 
+import scala.util.{Failure, Success}
+
 object ActorCapabilities extends App {
 
   class SimpleActor extends Actor {
@@ -58,5 +60,77 @@ object ActorCapabilities extends App {
 
   case class WirelessPhoneMessage(content: String, ref: ActorRef)
   alice ! WirelessPhoneMessage("Hi", bob) // The original sender here is noSender (deathLetters)
+
+  /**
+   * Exercises
+   *
+   * 1. A Counter actor
+   *  - Increment
+   *  - Decrement
+   *  - Print
+   *
+   *  2. A Bank Account as an actor
+   *    Receives:
+   *      - Deposit an amount
+   *      - Withdraw an amount
+   *      - Statement
+   *    Replies
+   *      - Success
+   *      - Failure
+   *
+   *  Interacts with other kind of actor
+   */
+
+  class CounterActor extends Actor {
+    var counter = 0
+
+    override def receive: Receive = {
+      case "Increment" => counter += 1
+      case "Decrement" => counter -= 1
+      case "Print" => println(s"[CounterActor] Counter = $counter")
+    }
+  }
+
+  val counterActor = system.actorOf(Props[CounterActor], "counterActor")
+
+  counterActor ! "Decrement"
+  counterActor ! "Increment"
+  counterActor ! "Decrement"
+  counterActor ! "Print"
+
+  case class Deposit(atm: ActorRef, amount: Long = 0)
+  case class Withdraw(atm: ActorRef, amount: Long = 0)
+  case class Statement(atm: ActorRef)
+
+  class BankActor extends Actor {
+    var balance = 0L
+
+    override def receive: Receive = {
+      case Deposit(atm, amount) =>
+        balance += amount
+        atm ! Success(s"[BackActor] Amount = $amount added to your balance")
+      case Withdraw(atm, amount) =>
+        balance -= amount
+        atm ! Success(s"[BackActor] Amount = $amount reduced from your balance")
+      case Statement(atm) =>
+        atm ! Success(s"[BackActor] You balance is $balance")
+      case _ =>
+        Failure(new Exception("I do not understand such operation"))
+    }
+  }
+
+  class ATMActor extends Actor {
+    override def receive: Receive = {
+      case Success(content) => println(content)
+      case Failure(exception) => println(exception)
+    }
+  }
+
+  val bankActor = system.actorOf(Props[BankActor], "bankActor")
+  val atmActor = system.actorOf(Props[ATMActor], "atmActor")
+
+  bankActor ! Deposit(atmActor, 2000)
+  bankActor ! Withdraw(atmActor, 500)
+  bankActor ! Statement(atmActor)
 
 }
