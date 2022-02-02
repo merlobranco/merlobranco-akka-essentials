@@ -34,13 +34,13 @@ object ChangingActorBehavior extends App {
     override def receive: Receive = happyReceive
 
     def happyReceive: Receive = {
-      case Food(VEGETABLE) => context.become(sadReceive) // Change my receive handler to sadReceive
+      case Food(VEGETABLE) => context.become(sadReceive, false) // Change my receive handler to sadReceive
       case Food(CHOCOLATE) => // Stay happy
       case Ask(_) => sender() ! KidAccept
     }
     def sadReceive: Receive = {
-      case Food(VEGETABLE) => // Stay sad
-      case Food(CHOCOLATE) => context.become(happyReceive)  // Change my receive handler to happyReceive
+      case Food(VEGETABLE) => context.become(sadReceive, false)
+      case Food(CHOCOLATE) => context.unbecome
       case Ask(_) => sender() ! KidReject
     }
   }
@@ -60,6 +60,9 @@ object ChangingActorBehavior extends App {
     override def receive: Receive = {
       case MomStart(kid) =>
         kid ! Food(VEGETABLE)
+        kid ! Food(VEGETABLE)
+        kid ! Food(CHOCOLATE)
+        kid ! Food(CHOCOLATE)
         kid ! Ask("Do you want to play?")
       case KidAccept => println("Yay, my kid is happy!")
       case KidReject => println("My kid is sad, but unless he is healthy!")
@@ -69,10 +72,44 @@ object ChangingActorBehavior extends App {
   val system = ActorSystem("changingActorBehaviourDemo")
   val mom = system.actorOf(Props[Mom], "momActor")
   val fussyKid = system.actorOf(Props[FussyKid], "fussyKidActor")
-  val statelessFussyKid = system.actorOf(Props[FussyKid], "statelessFussyKidActor")
+  val statelessFussyKid = system.actorOf(Props[StatelessFussyKid], "statelessFussyKidActor")
 
   mom ! Mom.MomStart(fussyKid)
 
   mom ! Mom.MomStart(statelessFussyKid)
+
+  /*
+    With context.become(sadReceive, true)
+      Food(veg) -> message handler turns to sadReceive
+      Food(chocolate) -> become happyReceive
+
+    With context.become(sadReceive, false)
+
+      Food(veg) -> stack.push(sadReceive)
+      Food(chocolate) -> stack.push(happyReceive)
+
+    Stack:
+      1. happyReceive   ->    1. sadReceive     ->    1. happyReceive
+                              2. happyReceive         2. sadReceive
+                                                      3. happyReceive
+
+    When an actor needs to handle a message, akka will call the top most message handler onto the stack
+    If the stack happens to be empty, the akka will call the plane received method
+   */
+
+  /*
+    New Behaviour (Using unbecome)
+
+    Food(veg)
+    Food(veg)
+    Food(choco)
+    Food(choco)
+
+    Stack:
+      1. sadReceive     ->    1. sadReceive     ->    1. sadReceive     ->    1. happyReceive
+      2. happyReceive         2. sadReceive     ->    2. happyReceive
+                              3. happyReceive
+  */
+
 
 }
