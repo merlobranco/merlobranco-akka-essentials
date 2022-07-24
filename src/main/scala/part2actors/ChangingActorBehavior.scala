@@ -111,5 +111,103 @@ object ChangingActorBehavior extends App {
                               3. happyReceive
   */
 
+  /**
+    * Exercises
+    * 1 - Recreate the Counter Actor with context.become and NO MUTABLE STATE
+    */
 
+  // Domain of the CounterActor
+  object CounterActor {
+    case object Increment
+    case object Decrement
+    case object Print
+  }
+
+  class CounterActor extends Actor {
+    import CounterActor._
+
+    override def receive: Receive = countReceive(0)
+
+    def countReceive(currentCount: Int): Receive = {
+        case Increment =>
+//          println(s"[$currentCount] incrementing")
+          context.become(countReceive(currentCount + 1))
+        case Decrement =>
+//          println(s"[$currentCount] decrementing")
+          context.become(countReceive(currentCount - 1))
+        case Print => println(s"[CounterActor] Counter = $currentCount")
+    }
+  }
+
+  val counterActor = system.actorOf(Props[CounterActor], "counterActor")
+
+  import CounterActor._
+  (1 to 5).foreach(_ => counterActor ! Increment)
+  (1 to 3).foreach(_ => counterActor ! Decrement)
+  counterActor ! Print
+
+  /**
+   * Exercises
+   * 2 - A simplified voting system
+   */
+
+  case class Vote(candidate: String)
+  case object VoteStatusRequest
+  case class VoteStatusReply(candidate: Option[String])
+
+  class Citizen extends Actor {
+    override def receive: Receive = performVote(None)
+
+    def performVote(vote: Option[String]): Receive = {
+      case Vote(candidate) => context.become(performVote(Some(candidate)))
+      case VoteStatusRequest => sender() ! VoteStatusReply(vote)
+    }
+  }
+
+  case class AggregateVotes(citizens: Set[ActorRef])
+  class VoteAggregator extends Actor {
+    override def receive: Receive = countingVotes(Map(), Set())
+
+    def countingVotes(votes: Map[String, Long], stillWaiting: Set[ActorRef]): Receive = {
+      case AggregateVotes(citizens) =>
+        context.become(countingVotes(votes, citizens))
+        citizens.foreach( citizen => citizen ! VoteStatusRequest)
+
+      case VoteStatusReply(candidate) => candidate match {
+        case Some(name) =>
+          val newVote = votes.getOrElse(name, 0L) + 1
+          checkVotes(votes + (name -> newVote), stillWaiting - sender())
+
+        case None =>
+          sender() ! VoteStatusRequest
+      }
+    }
+
+    private def checkVotes(votes: Map[String, Long], stillWaiting: Set[ActorRef]) = {
+      if (stillWaiting.isEmpty)
+        votes.foreach(x => println(s"${x._1} -> ${x._2}"))
+      context.become(countingVotes(votes, stillWaiting))
+    }
+  }
+
+  val alice = system.actorOf(Props[Citizen])
+  val bob = system.actorOf(Props[Citizen])
+  val charlie = system.actorOf(Props[Citizen])
+  val daniel = system.actorOf(Props[Citizen])
+
+  alice ! Vote("Martin")
+  bob ! Vote("Jonas")
+  charlie ! Vote("Roland")
+  daniel ! Vote("Roland")
+
+  val voteAggregator = system.actorOf(Props[VoteAggregator])
+  voteAggregator ! AggregateVotes(Set(alice, bob, charlie, daniel))
+
+  /*
+    Print the status of the votes
+
+     Martin -> 1
+     Jonas -> 1
+     Roland -> 2
+   */
 }
