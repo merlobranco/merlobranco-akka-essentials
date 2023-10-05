@@ -151,11 +151,15 @@ object ChangingActorBehavior extends App {
    * 2 - A simplified voting system
    */
 
-  case class Vote(candidate: String)
-  case object VoteStatusRequest
-  case class VoteStatusReply(candidate: Option[String])
+  object Citizen {
+    case class Vote(candidate: String)
+    case object VoteStatusRequest
+    case class VoteStatusReply(candidate: Option[String])
+  }
 
   class Citizen extends Actor {
+    import Citizen._
+
     override def receive: Receive = performVote(None)
 
     def performVote(vote: Option[String]): Receive = {
@@ -164,8 +168,14 @@ object ChangingActorBehavior extends App {
     }
   }
 
-  case class AggregateVotes(citizens: Set[ActorRef])
+  object VoteAggregator {
+    case class AggregateVotes(citizens: Set[ActorRef])
+  }
+
   class VoteAggregator extends Actor {
+    import Citizen._
+    import VoteAggregator._
+
     override def receive: Receive = countingVotes(Map(), Set())
 
     def countingVotes(votes: Map[String, Long], stillWaiting: Set[ActorRef]): Receive = {
@@ -194,6 +204,9 @@ object ChangingActorBehavior extends App {
   val bob = system.actorOf(Props[Citizen])
   val charlie = system.actorOf(Props[Citizen])
   val daniel = system.actorOf(Props[Citizen])
+
+  import Citizen._
+  import VoteAggregator._
 
   alice ! Vote("Martin")
   bob ! Vote("Jonas")
