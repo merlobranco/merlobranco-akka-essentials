@@ -33,6 +33,7 @@ class TimedAssertionsSpec extends TestKit(ActorSystem("TimedAssertionsSpec", Con
       within(1 second) {
         workerActor ! "workSequence"
 
+        // Receiving and proccess messages during a time window
         val results: Seq[Int] = receiveWhile[Int](max = 2 seconds, idle = 500 millis, messages = 10) {
           case WorkResult(result) => result
         }
@@ -43,6 +44,7 @@ class TimedAssertionsSpec extends TestKit(ActorSystem("TimedAssertionsSpec", Con
 
     "reply to a test probe in a timely manner" in {
       within(1 second) {
+        // TestProbes don't listen to within blocks!
         // The Probe has its own time out defined in specialTimedAssertionsConfig and ignores the within defined time out
         // because Probes have their own configuration
         val probe = TestProbe()
