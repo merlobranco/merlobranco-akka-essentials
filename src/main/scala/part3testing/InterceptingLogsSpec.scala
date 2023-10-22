@@ -84,10 +84,10 @@ object InterceptingLogsSpec {
   }
 
   class FulfillmentManager extends Actor with ActorLogging {
-    var orderId = 43
-    override def receive: Receive = {
+    override def receive: Receive = dispatching(43)
+      private def dispatching(orderId: Int): Receive = {
       case DispatchOrder(item: String) =>
-        orderId += 1
+        context.become(dispatching(orderId + 1))
         log.info(s"Order $orderId for item $item has been dispatched.")
         sender() ! OrderConfirmed
     }
